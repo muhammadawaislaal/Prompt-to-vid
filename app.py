@@ -12,15 +12,18 @@ from diffusers import DiffusionPipeline, DDIMScheduler
 st.set_page_config(page_title="🎬 Prompt-to-Video Generator", layout="centered")
 st.title("🎬 Prompt-to-Video Generator with Voiceover (No Watermark)")
 
-# === Load Stable AnimateDiff Pipeline (public + tested) ===
+# 🔍 Show hardware info
+device = "cuda" if torch.cuda.is_available() else "cpu"
+st.info(f"💻 Running on: {device.upper()}")
+
 @st.cache_resource
 def load_pipeline():
-    model_id = "cerspense/zeroscope_v2_576w"  # Verified public AnimateDiff-compatible model
+    model_id = "cerspense/zeroscope_v2_576w"
     pipe = DiffusionPipeline.from_pretrained(
         model_id,
-        torch_dtype=torch.float16,
+        torch_dtype=torch.float16 if device == "cuda" else torch.float32,
         trust_remote_code=True,
-    ).to("cuda")
+    ).to(device)
     pipe.scheduler = DDIMScheduler.from_config(pipe.scheduler.config)
     return pipe
 
@@ -34,11 +37,11 @@ seed = st.number_input("🔁 Seed (for consistency)", value=42)
 submit = st.button("🚀 Generate Video")
 
 if submit and prompt.strip():
-    with st.spinner("🧠 Generating frames..."):
+    with st.spinner("🧠 Generating video frames..."):
         torch.manual_seed(seed)
         output = pipe(prompt=prompt, num_inference_steps=25, num_frames=frames)
-        video_tensor = output.frames[0]
-        frames_np = (video_tensor.permute(0, 2, 3, 1).cpu().numpy() * 255).astype("uint8")
+        frames_tensor = output.frames[0]
+        frames_np = (frames_tensor.permute(0, 2, 3, 1).cpu().numpy() * 255).astype("uint8")
 
         temp_dir = tempfile.mkdtemp()
         frame_paths = []
@@ -47,7 +50,7 @@ if submit and prompt.strip():
             Image.fromarray(frame).save(path)
             frame_paths.append(path)
 
-    with st.spinner("🔊 Generating voiceover..."):
+    with st.spinner("🎙️ Generating voiceover..."):
         audio_path = os.path.join(temp_dir, "voice.mp3")
         gTTS(prompt).save(audio_path)
 
