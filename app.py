@@ -8,13 +8,11 @@ from PIL import Image
 from gtts import gTTS
 from diffusers import AnimateDiffPipeline, DDIMScheduler
 from tqdm import tqdm
-from pydub import AudioSegment
-from pydub.generators import Silent
 
 st.set_page_config(page_title="Prompt-to-Video w/ Voice", layout="centered")
-st.title("🎬 Prompt-to-Video Generator (Voiceover, No Watermark)")
+st.title("🎬 Prompt-to-Video Generator (High Quality + Voice)")
 
-# === Load AnimateDiff (cached) ===
+# === Load AnimateDiff ===
 @st.cache_resource
 def load_model():
     model_id = "animate-diff/animate-diff-sd15"
@@ -24,10 +22,10 @@ def load_model():
 
 pipe = load_model()
 
-prompt = st.text_area("🎯 Enter your prompt", height=100, placeholder="A robot dancing on Mars at night")
-frames = st.slider("🎞️ Number of frames", 16, 64, step=8, value=32)
+prompt = st.text_area("🎯 Prompt", height=100, placeholder="A futuristic city during sunset with flying cars")
+frames = st.slider("🎞️ Frames", 16, 64, 8, 32)
 fps = 8
-seed = st.number_input("🔁 Seed (optional)", value=42)
+seed = st.number_input("🔁 Seed", value=42)
 submit = st.button("Generate Video")
 
 if submit and prompt:
@@ -50,26 +48,18 @@ if submit and prompt:
         tts = gTTS(prompt)
         tts.save(audio_path)
 
-    with st.spinner("🎞️ Stitching video..."):
+    with st.spinner("🎞️ Creating video from frames..."):
         video_path = os.path.join(temp_dir, "video.mp4")
         writer = imageio.get_writer(video_path, fps=fps)
-
         for f in frame_paths:
             writer.append_data(imageio.imread(f))
         writer.close()
 
-    with st.spinner("🔊 Merging audio and video..."):
-        video = AudioSegment.silent(duration=len(frame_paths) * 1000 // fps)
-        voice = AudioSegment.from_mp3(audio_path)
-
-        combined_audio = voice + Silent(duration=max(0, len(video) - len(voice)))
-        final_audio_path = os.path.join(temp_dir, "combined.mp3")
-        combined_audio.export(final_audio_path, format="mp3")
-
+    with st.spinner("🔊 Merging video with audio (ffmpeg)..."):
         final_output_path = os.path.join(temp_dir, "final_output.mp4")
-        os.system(f'ffmpeg -y -i "{video_path}" -i "{final_audio_path}" -c:v copy -c:a aac -strict experimental "{final_output_path}"')
+        os.system(f'ffmpeg -y -i "{video_path}" -i "{audio_path}" -c:v libx264 -c:a aac -shortest "{final_output_path}"')
 
-    st.success("✅ Done! Here's your video with voiceover:")
+    st.success("✅ Done!")
     st.video(final_output_path)
     with open(final_output_path, "rb") as f:
         st.download_button("⬇️ Download Video", f, "prompt_video.mp4", mime="video/mp4")
