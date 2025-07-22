@@ -15,12 +15,13 @@ st.info(f"💻 Running on: {device.upper()}")
 
 @st.cache_resource
 def load_pipeline():
+    dtype = torch.float16 if torch.cuda.is_available() else torch.float32
     pipe = StableVideoDiffusionPipeline.from_pretrained(
         "stabilityai/stable-video-diffusion-img2vid",
-        torch_dtype=torch.float16 if device == "cuda" else torch.float32
+        torch_dtype=dtype,
+        variant="fp16" if dtype == torch.float16 else None
     )
     pipe = pipe.to(device)
-    pipe.enable_model_cpu_offload()
     return pipe
 
 pipe = load_pipeline()
