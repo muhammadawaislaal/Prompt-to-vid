@@ -4,4 +4,4 @@ imageio>=2.34.0
 gTTS>=2.5.1
 modelscope>=1.9.3
 addict>=2.4.0
-datasets>=2.19.0
+datasets==2.12.0  # ✅ Use this exact version or ModelScope breaks
