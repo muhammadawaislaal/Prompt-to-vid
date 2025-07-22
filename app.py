@@ -6,33 +6,45 @@ import imageio
 import tempfile
 from PIL import Image
 from gtts import gTTS
-from diffusers import AnimateDiffPipeline, DDIMScheduler
+from diffusers import DiffusionPipeline, DDIMScheduler
 from tqdm import tqdm
+from huggingface_hub import login
 
-st.set_page_config(page_title="Prompt-to-Video w/ Voice", layout="centered")
-st.title("🎬 Prompt-to-Video Generator (High Quality + Voice)")
+# Optional: Hugging Face token (only if private/protected model access is needed)
+if "HUGGINGFACE_TOKEN" in st.secrets:
+    login(token=st.secrets["HUGGINGFACE_TOKEN"])
 
-# === Load AnimateDiff ===
+st.set_page_config(page_title="Prompt-to-Video Generator", layout="centered")
+st.title("🎬 Prompt-to-Video Generator with Voice (No Watermark)")
+
+# === Load Model (zeroscope) ===
 @st.cache_resource
-def load_model():
-    model_id = "animate-diff/animate-diff-sd15"
-    pipe = AnimateDiffPipeline.from_pretrained(model_id, torch_dtype=torch.float16).to("cuda")
+def load_pipeline():
+    model_id = "cerspense/zeroscope_v2_576w"
+    pipe = DiffusionPipeline.from_pretrained(
+        model_id,
+        torch_dtype=torch.float16,
+        variant="fp16",
+        use_safetensors=True
+    ).to("cuda")
     pipe.scheduler = DDIMScheduler.from_config(pipe.scheduler.config)
     return pipe
 
-pipe = load_model()
+pipe = load_pipeline()
 
-prompt = st.text_area("🎯 Prompt", height=100, placeholder="A futuristic city during sunset with flying cars")
-frames = st.slider("🎞️ Frames", 16, 64, 8, 32)
+# === UI ===
+prompt = st.text_area("Enter your prompt", height=100, placeholder="A dragon flying over a neon city at night")
+frames = st.slider("🎞️ Number of frames", 16, 64, step=8, value=32)
 fps = 8
-seed = st.number_input("🔁 Seed", value=42)
+seed = st.number_input("Random seed", value=42)
 submit = st.button("Generate Video")
 
+# === Generation Logic ===
 if submit and prompt:
-    with st.spinner("🧠 Generating video frames..."):
-        generator = torch.manual_seed(seed)
-        output = pipe(prompt, num_inference_steps=25, num_frames=frames, generator=generator)
-        frames_tensor = output.frames[0]
+    with st.spinner("🎥 Generating video frames..."):
+        torch.manual_seed(seed)
+        video_output = pipe(prompt=prompt, num_inference_steps=25, num_frames=frames)
+        frames_tensor = video_output.frames[0]
         frames_np = (frames_tensor.permute(0, 2, 3, 1).cpu().numpy() * 255).astype("uint8")
 
         temp_dir = tempfile.mkdtemp()
@@ -48,14 +60,14 @@ if submit and prompt:
         tts = gTTS(prompt)
         tts.save(audio_path)
 
-    with st.spinner("🎞️ Creating video from frames..."):
+    with st.spinner("🧵 Stitching video..."):
         video_path = os.path.join(temp_dir, "video.mp4")
         writer = imageio.get_writer(video_path, fps=fps)
         for f in frame_paths:
             writer.append_data(imageio.imread(f))
         writer.close()
 
-    with st.spinner("🔊 Merging video with audio (ffmpeg)..."):
+    with st.spinner("🔊 Merging audio with video..."):
         final_output_path = os.path.join(temp_dir, "final_output.mp4")
         os.system(f'ffmpeg -y -i "{video_path}" -i "{audio_path}" -c:v libx264 -c:a aac -shortest "{final_output_path}"')
 
