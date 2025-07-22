@@ -3,3 +3,4 @@ torch>=2.2.0
 imageio>=2.34.0
 gTTS>=2.5.1
 modelscope>=1.9.3
+addict>=2.4.0
