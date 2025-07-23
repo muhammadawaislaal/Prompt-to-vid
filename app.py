@@ -1,47 +1,59 @@
 import streamlit as st
-import requests
+from PIL import Image
+import torch
+from diffusers import StableDiffusionPipeline
 import tempfile
 import os
 from gtts import gTTS
+import imageio
+from moviepy.editor import ImageSequenceClip, AudioFileClip
 
-st.set_page_config(page_title="🎬 Prompt-to-Video Generator", layout="centered")
-st.title("🎬 Prompt-to-Video with Voiceover (Streamlit Secure Token)")
+st.set_page_config(page_title="🎬 Prompt-to-Animated Video", layout="centered")
+st.title("🎬 Prompt-to-Animated Video Generator (Streamlit Cloud Ready)")
 
-# 🔐 Get token from Streamlit secrets (cloud only)
-try:
-    HF_TOKEN = st.secrets["huggingface"]["token"]
-except KeyError:
-    st.error("❌ Hugging Face token not found in secrets. Please set it in Streamlit Cloud.")
-    st.stop()
+device = "cuda" if torch.cuda.is_available() else "cpu"
+st.info(f"💻 Running on: {device.upper()}")
 
-API_URL = "https://api-inference.huggingface.co/models/damo-vilab/text-to-video-ms-1.7b"
-HEADERS = {"Authorization": f"Bearer {HF_TOKEN}"}
+@st.cache_resource
+def load_pipeline():
+    model_id = "CompVis/stable-diffusion-v1-4"
+    pipe = StableDiffusionPipeline.from_pretrained(model_id).to(device)
+    return pipe
 
-prompt = st.text_area("📝 Enter your prompt", "A cat surfing on waves")
-submit = st.button("🚀 Generate Video")
+pipe = load_pipeline()
 
-if submit and prompt.strip():
-    with st.spinner("🎥 Generating video..."):
-        response = requests.post(API_URL, headers=HEADERS, json={"inputs": prompt})
+prompt = st.text_area("📝 Describe your animation", "A robot dancing in Times Square", height=100)
+num_frames = st.slider("🖼️ Number of frames", 8, 32, 16)
+fps = st.slider("🎥 FPS", 4, 12, 6)
+generate = st.button("🚀 Generate Video")
 
-        if response.status_code == 200:
-            temp_dir = tempfile.mkdtemp()
-            video_path = os.path.join(temp_dir, "video.mp4")
-            with open(video_path, "wb") as f:
-                f.write(response.content)
+if generate and prompt:
+    with st.spinner("🎨 Generating frames..."):
+        temp_dir = tempfile.mkdtemp()
+        frame_paths = []
 
-            audio_path = os.path.join(temp_dir, "voice.mp3")
-            gTTS(prompt).save(audio_path)
+        for i in range(num_frames):
+            img = pipe(prompt).images[0]
+            path = os.path.join(temp_dir, f"frame_{i:03}.png")
+            img.save(path)
+            frame_paths.append(path)
 
-            final_path = os.path.join(temp_dir, "final_video.mp4")
-            os.system(
-                f'ffmpeg -y -i "{video_path}" -i "{audio_path}" '
-                f'-c:v libx264 -pix_fmt yuv420p -c:a aac -shortest "{final_path}"'
-            )
+    with st.spinner("🗣 Generating voiceover..."):
+        audio_path = os.path.join(temp_dir, "voice.mp3")
+        gTTS(prompt).save(audio_path)
 
-            st.success("✅ Video created!")
-            st.video(final_path)
-            with open(final_path, "rb") as f:
-                st.download_button("⬇️ Download", f, file_name="video.mp4", mime="video/mp4")
-        else:
-            st.error("Failed to generate video. Check your Hugging Face token or usage limits.")
+    with st.spinner("🎞 Creating video..."):
+        video_path = os.path.join(temp_dir, "video.mp4")
+        clip = ImageSequenceClip(frame_paths, fps=fps)
+        clip.write_videofile(video_path, audio=False, logger=None)
+
+    with st.spinner("🎙 Merging video and audio..."):
+        final_path = os.path.join(temp_dir, "final_video.mp4")
+        cmd = f'ffmpeg -y -i "{video_path}" -i "{audio_path}" -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest "{final_path}"'
+        os.system(cmd)
+
+    st.success("✅ Video Generated!")
+    st.video(final_path)
+
+    with open(final_path, "rb") as f:
+        st.download_button("⬇️ Download Video", f, file_name="animated_video.mp4", mime="video/mp4")
