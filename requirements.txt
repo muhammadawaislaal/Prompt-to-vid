@@ -6,3 +6,4 @@ gtts
 imageio
 moviepy
 Pillow
+huggingface_hub==0.20.3
