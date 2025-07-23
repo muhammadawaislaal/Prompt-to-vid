@@ -1,9 +1,10 @@
-streamlit
-torch
+streamlit==1.27.2
+torch==2.2.2
 diffusers==0.25.0
-transformers
-gtts
-imageio
-moviepy
-Pillow
+transformers==4.36.2
 huggingface_hub==0.20.3
+gtts==2.5.4
+imageio==2.31.5
+imageio-ffmpeg==0.4.8
+Pillow==10.3.0
+moviepy==1.0.3
