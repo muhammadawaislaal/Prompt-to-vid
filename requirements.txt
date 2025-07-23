@@ -1,3 +1,8 @@
 streamlit
-requests
-gTTS
+torch
+diffusers==0.25.0
+transformers
+gtts
+imageio
+moviepy
+Pillow
